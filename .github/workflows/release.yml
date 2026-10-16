@@ -1,0 +1,57 @@
+name: Build & Release
+
+on:
+  push:
+    # A version tag builds and publishes a release.
+    tags: ["v*"]
+    # Branch pushes only build. GitHub doesn't share caches between tags, but every
+    # ref can read the default branch's cache, so these runs keep it warm for releases.
+    # (Path filters are ignored for tag pushes.)
+    branches: [master, main]
+    paths:
+      - "src/**"
+      - "assets/**"
+      - "build.rs"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - ".github/workflows/release.yml"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    env:
+      CARGO_TERM_COLOR: always
+      # libui's bindgen needs libclang; LLVM is preinstalled on the Windows runners.
+      LIBCLANG_PATH: C:\Program Files\LLVM\bin
+    steps:
+      - uses: actions/checkout@v4
+
+      # Caches ~/.cargo (registry, git deps) and target/. Rust itself is preinstalled.
+      - uses: Swatinem/rust-cache@v2
+        with:
+          save-if: ${{ github.ref_type == 'branch' }}
+
+      - name: Set version from tag
+        if: github.ref_type == 'tag'
+        run: echo "APP_VERSION=${{ github.ref_name }}" >> $env:GITHUB_ENV
+
+      - name: Build
+        run: cargo build --release --locked
+
+      - name: Publish release
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >
+          gh release create "${{ github.ref_name }}"
+          target/release/run-with-other-gpu.exe
+          --title "${{ github.ref_name }}"
+          --generate-notes
+          --verify-tag

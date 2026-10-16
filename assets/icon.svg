@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#3b6cff"/>
+      <stop offset="1" stop-color="#7b2ff7"/>
+    </linearGradient>
+    <linearGradient id="badge" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#34d97a"/>
+      <stop offset="1" stop-color="#16a34a"/>
+    </linearGradient>
+  </defs>
+
+  <!-- background tile -->
+  <rect x="8" y="8" width="240" height="240" rx="52" fill="url(#bg)"/>
+
+  <!-- graphics card -->
+  <rect x="30" y="66" width="16" height="122" rx="5" fill="#c3cbe0"/>
+  <rect x="42" y="74" width="176" height="104" rx="16" fill="#f4f6fb"/>
+  <rect x="72" y="178" width="96" height="14" rx="3" fill="#ffc53d"/>
+  <rect x="178" y="92" width="26" height="20" rx="4" fill="#9aa6c4"/>
+  <rect x="178" y="122" width="26" height="20" rx="4" fill="#9aa6c4"/>
+
+  <!-- fan -->
+  <circle cx="110" cy="126" r="40" fill="#25304f"/>
+  <g fill="#8ea2d8">
+    <path d="M110 126 C 104 104, 116 92, 130 96 C 124 108, 118 116, 110 126 Z"/>
+    <path d="M110 126 C 104 104, 116 92, 130 96 C 124 108, 118 116, 110 126 Z" transform="rotate(120 110 126)"/>
+    <path d="M110 126 C 104 104, 116 92, 130 96 C 124 108, 118 116, 110 126 Z" transform="rotate(240 110 126)"/>
+  </g>
+  <circle cx="110" cy="126" r="9" fill="#f4f6fb"/>
+
+  <!-- run badge -->
+  <circle cx="186" cy="186" r="50" fill="url(#badge)" stroke="#ffffff" stroke-width="8"/>
+  <path d="M172 162 L172 210 L212 186 Z" fill="#ffffff" stroke="#ffffff" stroke-width="6" stroke-linejoin="round"/>
+</svg>
