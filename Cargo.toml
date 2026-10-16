@@ -3,6 +3,8 @@ name = "run-with-other-gpu"
 version = "0.1.0"
 edition = "2021"
 description = "Explorer context menu to launch an .exe on a different GPU"
+license = "MIT"
+repository = "https://github.com/amir9480/run-with-other-gpu"
 
 [build-dependencies]
 embed-resource = "2.5"

@@ -4,103 +4,82 @@
 [![Downloads](https://img.shields.io/github/downloads/amir9480/run-with-other-gpu/total)](https://github.com/amir9480/run-with-other-gpu/releases)
 [![Build & Release](https://github.com/amir9480/run-with-other-gpu/actions/workflows/release.yml/badge.svg)](https://github.com/amir9480/run-with-other-gpu/actions/workflows/release.yml)
 ![Platform: Windows 10/11](https://img.shields.io/badge/platform-Windows%2010%20%7C%2011-0078D6)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 **[⬇ Download the latest release](https://github.com/amir9480/run-with-other-gpu/releases/latest)**
 
-Windows-only tool that adds a **Run with other graphic** submenu to the Explorer
-context menu of `.exe` files, with one entry per GPU role, for example
-`Power saving (Intel(R) Arc(TM) Graphics)` and `High performance (NVIDIA ...)`.
+Run any app on the graphics card you choose, just this once, straight from the
+right-click menu.
 
-If you pick the GPU the app already uses, the tool just launches the app.
-Otherwise it:
-
-1. saves the app's current per-app GPU preference
-   (`HKCU\Software\Microsoft\DirectX\UserGpuPreferences`) to
-   `%LOCALAPPDATA%\RunWithOtherGpu\state.json`;
-2. writes the chosen `GpuPreference` and launches the app inside a Job Object;
-3. waits in the background (with no window or taskbar icon) until every process
-   in the app's process tree has exited, then restores the original value.
-
-If the helper is killed or crashes, the next start of the tool restores the
-original preference from `state.json`.
-
-## Screenshots
-
-The context menu on an `.exe`:
+On a laptop with two GPUs, right-click an `.exe` and pick
+**Run with other graphic** › **High performance** (your dedicated GPU) or
+**Power saving** (your integrated GPU). The app starts on that GPU, and when you
+close it, your normal graphics settings come back on their own.
 
 ![Explorer context menu showing "Run with other graphic" with a Power saving and a High performance entry](assets/Screenshot-2.jpg)
 
-The dialog shown when you run the tool directly:
+## Install
+
+1. Download `run-with-other-gpu.exe` from the
+   [releases page](https://github.com/amir9480/run-with-other-gpu/releases/latest).
+2. Run it and click **Install Context Menu**. No admin rights are needed.
 
 ![Run with other GPU dialog with Install and Remove buttons](assets/Screenshot-1.jpg)
 
-## Download
+The app needs the
+[Microsoft Visual C++ Redistributable (x64)](https://aka.ms/vs/17/release/vc_redist.x64.exe),
+which most PCs already have. If yours doesn't, the app shows this download link
+when you start it.
 
-Get `run-with-other-gpu.exe` from the
-[releases page](https://github.com/amir9480/run-with-other-gpu/releases). It's a
-single standalone exe; run it and click **Install Context Menu**.
+## Use
 
-It needs the [Microsoft Visual C++ Redistributable (x64)](https://aka.ms/vs/17/release/vc_redist.x64.exe),
-which most PCs already have. If it's missing, the app shows a download link
-instead of starting.
+Right-click any `.exe` file and choose
+**Run with other graphic**, then the GPU you want.
 
-## Usage
+On Windows 11, the entry is in the classic menu. Choose **Show more options**,
+or hold **Shift** while you right-click.
 
-```
-run-with-other-gpu.exe                       dialog with Install / Remove buttons
-run-with-other-gpu.exe --install             install the context menu
-run-with-other-gpu.exe --remove              remove the context menu (alias: --uninstall)
-run-with-other-gpu.exe --run <role> <exe>    power-saving | high-performance
-```
+## Uninstall
 
-Install copies the exe to `%LOCALAPPDATA%\RunWithOtherGpu\` and registers that
-copy under HKCU, so no admin rights are needed. On Windows 11 the menu is under
-**Show more options**. GPU names are captured at install time; click Install
-again after a hardware or driver change.
+Run `run-with-other-gpu.exe` again and click **Remove From Context Menu**.
 
-## Building
-
-Requirements:
-- MSVC toolchain (Visual Studio Build Tools).
-- LLVM, because libui's bindgen needs `libclang`: `winget install LLVM.LLVM`.
+## Command line
 
 ```
-set LIBCLANG_PATH=C:\Program Files\LLVM\bin
-cargo build --release
+run-with-other-gpu.exe --install
+run-with-other-gpu.exe --remove
+run-with-other-gpu.exe --run high-performance "C:\Path\To\App.exe"
+run-with-other-gpu.exe --run power-saving "C:\Path\To\App.exe"
 ```
 
-Local builds show `dev` as the version in the window title; release builds show
-the tag.
+`--run` also works in your own shortcuts.
 
-## Releasing
+## Good to know
 
-Push a version tag; the [Build & Release](.github/workflows/release.yml) workflow
-builds the exe and publishes it as a GitHub release:
+- **Added a GPU or updated drivers?** Click **Install Context Menu** again to
+  refresh the GPU names in the menu.
+- **Apps you've never set a GPU for** run on power saving by default, which
+  matches Windows' "Let Windows decide".
+- **If you change the app's GPU in Windows Settings while it's running**, your
+  change is kept.
+- **Apps that need admin rights** start after the usual Windows prompt.
+- **Some apps choose their GPU themselves** and may ignore the Windows setting.
 
-```
-git tag v1.0.0
-git push origin v1.0.0
-```
+## How it works
 
-Pushes to `master`/`main` that touch the code only build. They keep the cargo
-cache warm, because a tag build can't reuse another tag's cache.
+The tool uses the same per-app setting as **Settings › Display › Graphics**
+(`HKCU\Software\Microsoft\DirectX\UserGpuPreferences`).
 
-## Icon
+1. If the app is already set to the GPU you picked, the tool just launches it.
+2. Otherwise, it saves the app's current setting to
+   `%LOCALAPPDATA%\RunWithOtherGpu\state.json`, switches it to the chosen GPU,
+   and launches the app.
+3. A hidden background process waits until the app and any processes it
+   started have exited, then restores the saved setting.
 
-`assets/icon.svg` is the source. After editing it, regenerate `assets/icon.ico`
-with ImageMagick (`winget install ImageMagick.ImageMagick`):
+If that background process is interrupted, for example by a crash or a
+shutdown, the next start of the tool restores the setting from `state.json`.
 
-```
-magick -background none -density 384 assets\icon.svg -define icon:auto-resize=256,64,48,32,24,20,16 assets\icon.ico
-```
+## License
 
-`build.rs` embeds it through `assets/app.rc`.
-
-## Notes
-
-- "Let Windows decide" (or no per-app preference) counts as **power saving**.
-- An app whose manifest requires admin is started through UAC. Only that
-  process is tracked, not its children, because a non-elevated helper can't
-  put an elevated process in its Job Object.
-- If you change the app's GPU preference in Settings while it is running,
-  your change is kept and is not reverted.
+[MIT](LICENSE)
