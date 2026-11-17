@@ -1,11 +1,13 @@
-//! `--run <role> <exe>`: launch an app on a GPU and revert the preference when it exits.
+//! `--run <role> <exe>`: launch an app on a GPU and revert the preference once the app
+//! has had time to pick its GPU (or exits sooner).
 
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
+use std::time::{Duration, Instant};
 
 use anyhow::{anyhow, bail, Context, Result};
 use windows::core::{w, PWSTR};
-use windows::Win32::Foundation::{CloseHandle, ERROR_ELEVATION_REQUIRED, HANDLE, INVALID_HANDLE_VALUE};
+use windows::Win32::Foundation::{CloseHandle, ERROR_ELEVATION_REQUIRED, HANDLE, INVALID_HANDLE_VALUE, WAIT_TIMEOUT};
 use windows::Win32::Storage::FileSystem::GetLongPathNameW;
 use windows::Win32::System::SystemServices::JOB_OBJECT_MSG_ACTIVE_PROCESS_ZERO;
 use windows::Win32::System::IO::{CreateIoCompletionPort, GetQueuedCompletionStatus, OVERLAPPED};
@@ -14,7 +16,7 @@ use windows::Win32::System::JobObjects::{
     SetInformationJobObject, JOBOBJECT_ASSOCIATE_COMPLETION_PORT,
 };
 use windows::Win32::System::Threading::{
-    CreateProcessW, ResumeThread, WaitForSingleObject, CREATE_SUSPENDED, CREATE_UNICODE_ENVIRONMENT, INFINITE,
+    CreateProcessW, ResumeThread, WaitForSingleObject, CREATE_SUSPENDED, CREATE_UNICODE_ENVIRONMENT,
     PROCESS_INFORMATION, STARTUPINFOW,
 };
 use windows::Win32::UI::Shell::{ShellExecuteExW, SEE_MASK_NOASYNC, SEE_MASK_NOCLOSEPROCESS, SHELLEXECUTEINFOW};
@@ -22,6 +24,9 @@ use windows::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
 
 use crate::gpu::Role;
 use crate::{prefs, state, util};
+
+/// How long the GPU preference stays overridden after launch. Apps choose their GPU at startup.
+const GRACE: Duration = Duration::from_secs(30);
 
 pub fn run(args: &[OsString]) -> i32 {
     match run_inner(args) {
@@ -59,7 +64,7 @@ fn run_inner(args: &[OsString]) -> Result<()> {
     }
 
     state::acquire(&exe_name, role)?;
-    let result = launch_and_wait(&exe);
+    let result = launch_and_wait(&exe, Instant::now() + GRACE);
     let released = state::release(&exe_name);
     result.with_context(|| format!("Failed to run {}", exe.display()))?;
     released
@@ -80,8 +85,9 @@ fn full_path(path: &Path) -> Result<PathBuf> {
     Ok(PathBuf::from(String::from_utf16_lossy(&buf[..len])))
 }
 
-/// Starts `exe` inside a job object and blocks until every process in the job has exited.
-fn launch_and_wait(exe: &Path) -> Result<()> {
+/// Starts `exe` inside a job object and blocks until every process in the job has exited
+/// or `GRACE` has passed, whichever comes first.
+fn launch_and_wait(exe: &Path, deadline: Instant) -> Result<()> {
     unsafe {
         let job = Handle(CreateJobObjectW(None, None).context("CreateJobObject")?);
         let port = Handle(CreateIoCompletionPort(INVALID_HANDLE_VALUE, None, 0, 1).context("CreateIoCompletionPort")?);
@@ -120,9 +126,9 @@ fn launch_and_wait(exe: &Path) -> Result<()> {
                 let in_job = AssignProcessToJobObject(job.0, process.0).is_ok();
                 ResumeThread(thread.0);
                 if in_job {
-                    wait_for_empty_job(job.0, port.0)
+                    wait_for_empty_job(job.0, port.0, deadline)
                 } else {
-                    WaitForSingleObject(process.0, INFINITE);
+                    WaitForSingleObject(process.0, remaining_ms(deadline));
                     Ok(())
                 }
             }
@@ -132,7 +138,7 @@ fn launch_and_wait(exe: &Path) -> Result<()> {
             Err(e) if e.code() == ERROR_ELEVATION_REQUIRED.to_hresult() => {
                 if let Some(process) = shell_execute(exe, true)? {
                     let process = Handle(process);
-                    WaitForSingleObject(process.0, INFINITE);
+                    WaitForSingleObject(process.0, remaining_ms(deadline));
                 }
                 Ok(())
             }
@@ -141,13 +147,22 @@ fn launch_and_wait(exe: &Path) -> Result<()> {
     }
 }
 
-fn wait_for_empty_job(job: HANDLE, port: HANDLE) -> Result<()> {
+fn remaining_ms(deadline: Instant) -> u32 {
+    deadline.saturating_duration_since(Instant::now()).as_millis().min(u32::MAX as u128 - 1) as u32
+}
+
+fn wait_for_empty_job(job: HANDLE, port: HANDLE, deadline: Instant) -> Result<()> {
     loop {
         let mut code = 0u32;
         let mut key = 0usize;
         let mut overlapped: *mut OVERLAPPED = std::ptr::null_mut();
-        unsafe { GetQueuedCompletionStatus(port, &mut code, &mut key, &mut overlapped, INFINITE) }
-            .context("GetQueuedCompletionStatus")?;
+        let got = unsafe { GetQueuedCompletionStatus(port, &mut code, &mut key, &mut overlapped, remaining_ms(deadline)) };
+        if let Err(e) = got {
+            if e.code() == windows::core::HRESULT::from_win32(WAIT_TIMEOUT.0) {
+                return Ok(());
+            }
+            return Err(e).context("GetQueuedCompletionStatus");
+        }
         if key == job.0 as usize && code == JOB_OBJECT_MSG_ACTIVE_PROCESS_ZERO {
             return Ok(());
         }

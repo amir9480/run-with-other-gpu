@@ -74,11 +74,13 @@ The tool uses the same per-app setting as **Settings › Display › Graphics**
 2. Otherwise, it saves the app's current setting to
    `%LOCALAPPDATA%\RunWithOtherGpu\state.json`, switches it to the chosen GPU,
    and launches the app.
-3. A hidden background process waits until the app and any processes it
-   started have exited, then restores the saved setting.
+3. A hidden background process waits up to 30 seconds (or until the app and
+   any processes it started exit, if sooner), then restores the saved setting
+   and closes. The app keeps the GPU it picked at startup.
 
-If that background process is interrupted, for example by a crash or a
-shutdown, the next start of the tool restores the setting from `state.json`.
+If that background process is interrupted within those 30 seconds, for example
+by a crash or a shutdown, the next start of the tool restores the setting from
+`state.json`.
 
 ## License
 
